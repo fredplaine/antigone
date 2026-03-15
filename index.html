@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Antigone TRAE - Répétition Mobile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(to bottom right, #0f172a, #581c87, #0f172a);
+            min-height: 100vh;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: pan-y;
+        }
+        
+        /* Styles généraux pour les icônes de contrôle */
+        .control-button svg {
+            width: 2.2em;
+            height: 2.2em;
+        }
+        
+        /* Icônes dans les titres des panneaux */
+        .panel-title-icon svg {
+            width: 1.5em;
+            height: 1.5em;
+        }
+        
+        /* Conteneur principal pour empêcher le défilement horizontal de la page */
+        .main-container {
+            overflow-x: hidden;
+        }
+        
+        /* Exception pour les contrôles mobiles qui doivent pouvoir défiler horizontalement */
+        .mobile-controls {
+            overflow-x: auto !important;
+        }
+        
+        /* Styles pour mobile */
+        @media (max-width: 768px) {
+            .mobile-tap-area {
+                min-height: 40px;
+                min-width: 40px;
+            }
+            
+            .mobile-text {
+                font-size: 1.1rem;
+                line-height: 1.6;
+            }
+            
+            .mobile-controls {
+                padding: 6px;
+                gap: 4px;
+                overflow-x: auto;
+                flex-wrap: nowrap;
+                justify-content: flex-start;
+                -webkit-overflow-scrolling: touch;
+                touch-action: pan-x;
+            }
+            
+            .mobile-controls::-webkit-scrollbar {
+                display: none;
+            }
+            
+            .mobile-controls {
+                -ms-overflow-style: none;
+                scrollbar-width: none;
+            }
+            
+            .mobile-fullscreen {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                z-index: 1000;
+                background: linear-gradient(to bottom right, #0f172a, #581c87, #0f172a);
+            }
+            
+            /* Agrandir les icônes sur mobile */
+            .control-button svg {
+                width: 2.8em !important;
+                height: 2.8em !important;
+            }
+            
+            /* Bouton Suivant encore plus grand */
+            .control-button:nth-child(3) svg {
+                width: 3.2em !important;
+                height: 3.2em !important;
+                transform: scale(1.1);
+            }
+            
+            /* Augmenter le padding des boutons sur mobile */
+            .control-button {
+                padding: 0.6rem !important;
+            }
+            
+            /* Bouton Suivant avec encore plus de padding */
+            .control-button:nth-child(3) {
+                padding: 0.8rem !important;
+            }
+        }
+        
+        /* Animation pour les gestes */
+        .swipe-hint {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+        
+        /* Prévention de la mise en veille */
+        .prevent-sleep {
+            animation: preventSleep 60s infinite;
+        }
+        
+        @keyframes preventSleep {
+            0% { opacity: 1; }
+            100% { opacity: 1; }
+        }
+        
+        /* Centrer les icônes dans les boutons */
+        .control-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .control-button svg {
+            display: block;
+        }
+    </style>
+</head>
+<body class="text-white prevent-sleep">
+    <div id="root"></div>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Icônes optimisées pour mobile
+        const PlayIcon = () => (
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+        );
+
+        const PauseIcon = () => (
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="6" y="4" width="4" height="16"></rect>
+                <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+        );
+
+        const SkipForwardIcon = () => (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polygon points="5 4 15 12 5 20 5 4"></polygon>
+                <line x1="19" y1="5" x2="19" y2="19"></line>
+            </svg>
+        );
+
+        const SkipForwardIconContrast = () => (
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                <polygon points="5 4 15 12 5 20 5 4"></polygon>
+                <line x1="19" y1="5" x2="19" y2="19"></line>
+            </svg>
+        );
+
+        const SkipBackIcon = () => (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polygon points="19 20 9 12 19 4 19 20"></polygon>
+                <line x1="5" y1="19" x2="5" y2="5"></line>
+            </svg>
+        );
+
+        const RotateCcwIcon = () => (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="1 4 1 10 7 10"></polyline>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+            </svg>
+        );
+
+        const SettingsIcon = () => (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 1v6m0 6v6m-6-6h6m6 0h-6"></path>
+            </svg>
+        );
+
+        const Volume2Icon = () => (
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            </svg>
+        );
+
+
+
+        const SwipeHintIcon = () => (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M7 17l5-5-5-5M13 17l5-5-5-5"></path>
+            </svg>
+        );
+
+        const BookmarkIcon = () => (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+            </svg>
+        );
+
+        const BookmarkFilledIcon = () => (
+            <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2.5">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+            </svg>
+        );
+
+        const ListIcon = () => (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+            </svg>
+        );
+
+        const PromptIcon = () => (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+        );
+
+        const EyeIcon = () => (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+        );
+
+        const EyeOffIcon = () => (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+            </svg>
+        );
+
+        const AntigoneRehearsal = () => {
+            const [currentScene, setCurrentScene] = useState(0);
+            const [currentLine, setCurrentLine] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [showSettings, setShowSettings] = useState(false);
+            const [voices, setVoices] = useState([]);
+            const [selectedVoices, setSelectedVoices] = useState({});
+            const [speechRate, setSpeechRate] = useState(1.15);
+            const [commaPause, setCommaPause] = useState(0.25);
+            const [sentencePause, setSentencePause] = useState(0.75);
+            const [revealedLine, setRevealedLine] = useState(false);
+
+            const [showSwipeHint, setShowSwipeHint] = useState(true);
+            const [showBookmarks, setShowBookmarks] = useState(false);
+            const [showPrompter, setShowPrompter] = useState(false);
+            const [prompterTimer, setPrompterTimer] = useState(3); // secondes avant révélation
+            const [prompterState, setPrompterState] = useState('hidden'); // 'hidden', 'hint', 'full', 'audio'
+            const [hintTimer, setHintTimer] = useState(null);
+            const [bookmarks, setBookmarks] = useState({});
+            const [touchStartX, setTouchStartX] = useState(null);
+            const utteranceRef = useRef(null);
+            const rootRef = useRef(null);
+
+            // Charger les paramètres sauvegardés
+            useEffect(() => {
+                const savedSettings = localStorage.getItem('antigoneTRAE_settings');
+                if (savedSettings) {
+                    const settings = JSON.parse(savedSettings);
+                    setSpeechRate(settings.speechRate || 1.15);
+                    setCommaPause(settings.commaPause || 0.25);
+                    setSentencePause(settings.sentencePause || 0.75);
+                    setSelectedVoices(settings.selectedVoices || {});
+                }
+
+                // Charger les marque-pages sauvegardés
+                const savedBookmarks = localStorage.getItem('antigoneTRAE_bookmarks');
+                if (savedBookmarks) {
+                    setBookmarks(JSON.parse(savedBookmarks));
+                }
+
+                // Charger les paramètres du souffleur
+                const savedPrompter = localStorage.getItem('antigoneTRAE_prompter');
+                if (savedPrompter) {
+                    const prompterSettings = JSON.parse(savedPrompter);
+                    setPrompterTimer(prompterSettings.timer || 3);
+                }
+            }, []);
+
+            // Sauvegarder les paramètres
+            const saveSettings = () => {
+                const settings = {
+                    speechRate,
+                    commaPause,
+                    sentencePause,
+                    selectedVoices
+                };
+                localStorage.setItem('antigoneTRAE_settings', JSON.stringify(settings));
+            };
+
+            // Sauvegarder les marque-pages
+            const saveBookmarks = () => {
+                localStorage.setItem('antigoneTRAE_bookmarks', JSON.stringify(bookmarks));
+            };
+
+            // Sauvegarder les paramètres du souffleur
+            const savePrompterSettings = () => {
+                const settings = {
+                    timer: prompterTimer
+                };
+                localStorage.setItem('antigoneTRAE_prompter', JSON.stringify(settings));
+            };
+
+            // Ajouter/retirer un marque-page
+            const toggleBookmark = () => {
+                const key = `${currentScene}-${currentLine}`;
+                const newBookmarks = { ...bookmarks };
+                
+                if (newBookmarks[key]) {
+                    delete newBookmarks[key];
+                } else {
+                    newBookmarks[key] = {
+                        scene: currentScene,
+                        line: currentLine,
+                        character: currentLineData.character,
+                        text: currentLineData.text.substring(0, 50) + (currentLineData.text.length > 50 ? '...' : ''),
+                        date: new Date().toISOString(),
+                        category: 'À travailler' // Par défaut
+                    };
+                }
+                
+                setBookmarks(newBookmarks);
+                localStorage.setItem('antigoneTRAE_bookmarks', JSON.stringify(newBookmarks));
+            };
+
+            // Vérifier si la réplique actuelle est marquée
+            const isBookmarked = () => {
+                const key = `${currentScene}-${currentLine}`;
+                return !!bookmarks[key];
+            };
+
+            // Aller à un marque-page spécifique
+            const goToBookmark = (scene, line) => {
+                setCurrentScene(scene);
+                setCurrentLine(line);
+                setIsPlaying(false);
+                setRevealedLine(false);
+                setShowBookmarks(false);
+                window.speechSynthesis.cancel();
+            };
+
+            // Supprimer un marque-page
+            const removeBookmark = (key) => {
+                const newBookmarks = { ...bookmarks };
+                delete newBookmarks[key];
+                setBookmarks(newBookmarks);
+                localStorage.setItem('antigoneTRAE_bookmarks', JSON.stringify(newBookmarks));
+            };
+
+            // Générer le texte selon l'état du souffleur
+            const getPrompterText = (text) => {
+                if (!showPrompter || prompterState === 'hidden') {
+                    // Utiliser des points de suspension au lieu de underscores
+                    return '...';
+                }
+                
+                if (prompterState === 'hint') {
+                    // Afficher les deux premiers mots + le reste masqué
+                    const words = text.split(' ');
+                    if (words.length <= 2) return text;
+                    
+                    const firstTwoWords = words.slice(0, 2).join(' ');
+                    return firstTwoWords + ' ...';
+                }
+                
+                // 'full' ou 'audio' : texte complet
+                return text;
+            };
+
+            // Gérer le timer du souffleur
+            useEffect(() => {
+                // Nettoyer le timer précédent
+                if (hintTimer) {
+                    clearTimeout(hintTimer);
+                    setHintTimer(null);
+                }
+
+                // Démarrer un nouveau timer si le souffleur est activé et c'est une réplique du Garde
+                if (showPrompter && currentLineData.isGuard) {
+                    // En mode souffleur, la réplique est automatiquement "révélée"
+                    if (!revealedLine) {
+                        setRevealedLine(true);
+                    }
+                    
+                    setPrompterState('hidden');
+                    
+                    const timer = setTimeout(() => {
+                        setPrompterState('hint');
+                    }, prompterTimer * 1000);
+                    
+                    setHintTimer(timer);
+                    
+                    return () => {
+                        if (timer) clearTimeout(timer);
+                    };
+                } else {
+                    setPrompterState('hidden');
+                }
+            }, [currentScene, currentLine, showPrompter, prompterTimer]);
+
+            // Réinitialiser l'état quand on change de réplique
+            useEffect(() => {
+                setPrompterState('hidden');
+                if (hintTimer) {
+                    clearTimeout(hintTimer);
+                    setHintTimer(null);
+                }
+            }, [currentScene, currentLine]);
+
+            // Gérer le clic sur le texte en mode souffleur
+            const handlePrompterClick = () => {
+                if (!showPrompter || !currentLineData.isGuard) return;
+                
+                // En mode souffleur, la réplique est automatiquement considérée comme révélée
+                if (!revealedLine) {
+                    setRevealedLine(true);
+                }
+                
+                if (prompterState === 'hidden' || prompterState === 'hint') {
+                    // Premier clic : afficher le texte complet
+                    setPrompterState('full');
+                } else if (prompterState === 'full') {
+                    // Deuxième clic : lire le texte
+                    setPrompterState('audio');
+                    speakGuardLine(currentLineData.text);
+                } else if (prompterState === 'audio') {
+                    // Troisième clic : revenir au texte complet
+                    setPrompterState('full');
+                }
+            };
+
+            // Gestion des gestes tactiles
+            const handleTouchStart = (e) => {
+                setTouchStartX(e.touches[0].clientX);
+            };
+
+            const handleTouchEnd = (e) => {
+                if (touchStartX === null) return;
+                
+                const touchEndX = e.changedTouches[0].clientX;
+                const diffX = touchStartX - touchEndX;
+                
+                // Seuil pour détecter un swipe
+                if (Math.abs(diffX) > 50) {
+                    if (diffX > 0) {
+                        // Swipe gauche -> suivant
+                        handleNext();
+                    } else {
+                        // Swipe droite -> précédent
+                        handlePrevious();
+                    }
+                    
+                    // Cacher l'indicateur après premier swipe
+                    if (showSwipeHint) {
+                        setShowSwipeHint(false);
+                        localStorage.setItem('antigoneTRAE_swipeHintSeen', 'true');
+                    }
+                }
+                
+                setTouchStartX(null);
+            };
+
+            // Vérifier si l'indicateur swipe a déjà été vu
+            useEffect(() => {
+                const swipeHintSeen = localStorage.getItem('antigoneTRAE_swipeHintSeen');
+                if (swipeHintSeen === 'true') {
+                    setShowSwipeHint(false);
+                }
+            }, []);
+
+            const scenes = [
+                {
+                    title: "Scène 1 : Le Garde annonce la découverte",
+                    lines: [
+                        { character: "LE GARDE", text: "Garde Jonas, de la Deuxième Compagnie.", isGuard: true },
+                        { character: "CRÉON", text: "Qu'est-ce que tu veux ?" },
+                        { character: "LE GARDE", text: "Voilà, chef. On a tiré au sort pour savoir celui qui viendrait. Et le sort est tombé sur moi. Alors, voilà, chef. Je suis venu parce qu'on a pensé qu'il valait mieux qu'il n'y en ait qu'un qui explique, et puis parce qu'on ne pouvait pas abandonner le poste tous les trois. On est les trois du piquet de garde, chef, autour du cadavre.", isGuard: true },
+                        { character: "CRÉON", text: "Qu'as-tu à me dire ?" },
+                        { character: "LE GARDE", text: "On est trois, chef. Je ne suis pas tout seul. Les autres c'est Durand et le garde de première classe Boudousse.", isGuard: true },
+                        { character: "CRÉON", text: "Pourquoi n'est-ce pas le première classe qui est venu ?" },
+                        { character: "LE GARDE", text: "N'est-ce pas, chef? Je l'ai dit tout de suite, moi. C'est le première classe qui doit y aller. Quand il n'y a pas de gradé, c'est le première classe qui est responsable. Mais les autres ils ont dit non et ils ont voulu tirer au sort. Faut-il que j'aille chercher le première classe, chef?", isGuard: true },
+                        { character: "CRÉON", text: "Non. Parle, toi, puisque tu es là." },
+                        { character: "LE GARDE", text: "J'ai dix-sept ans de service. Je suis engagé volontaire, la médaille, deux citations. Je suis bien noté, chef. Moi je suis service. Je ne connais que ce qui est commandé. Mes supérieurs ils disent toujours : Avec Jonas on est tranquille.", isGuard: true },
+                        { character: "CRÉON", text: "C'est bon. Parle. De quoi as-tu peur ?" },
+                        { character: "LE GARDE", text: "Régulièrement ça aurait dû être le première classe. Moi je suis proposé première classe, mais je ne suis pas encore promu. Je devais être promu en juin.", isGuard: true },
+                        { character: "CRÉON", text: "Vas-tu parler enfin ? S'il est arrivé quelque chose, vous êtes tous les trois responsables. Ne cherche plus qui devrait être là." },
+                        { character: "LE GARDE", text: "Hé bien, voilà, chef : le cadavre... On a veillé pourtant ! On avait la relève de deux heures, la plus dure. Vous savez ce que c'est, chef, au moment où la nuit va finir. Ce plomb entre les yeux, la nuque qui tire, et puis toutes ces ombres qui bougent et le brouillard du petit matin qui se lève... Ah ! ils ont bien choisi leur heure ! On était là, on parlait, on battait la semelle... On ne dormait pas, chef, ça on peut vous le jurer tous les trois qu'on ne dormait pas ! D'ailleurs, avec le froid qu'il faisait... Tout d'un coup, moi je regarde le cadavre... On était à deux pas, mais moi je le regardais de temps en temps tout de même... Je suis comme ça, moi, chef, je suis méticuleux. C'est pour ça que mes supérieurs ils disent : Avec Jonas... C'est moi qui l'ai vu le premier, chef ! Les autres vous le diront, c'est moi qui ai donné le premier l'alarme.", isGuard: true },
+                        { character: "CRÉON", text: "L'alarme ? Pourquoi ?" },
+                        { character: "LE GARDE", text: "Le cadavre, chef. Quelqu'un l'avait recouvert. Oh ! pas grand-chose. Ils n'avaient pas eu le temps avec nous autres à côté. Seulement un peu de terre... Mais assez tout de même pour le cacher aux vautours.", isGuard: true },
+                        { character: "CRÉON", text: "Tu es sûr que ce n'est pas une bête en grattant ?" },
+                        { character: "LE GARDE", text: "Non, chef. On a d'abord espéré ça, nous aussi. Mais la terre était jetée sur lui. Selon les rites. C'est quelqu'un qui savait ce qu'il faisait.", isGuard: true },
+                        { character: "CRÉON", text: "Qui a osé ? Qui a été assez fou pour braver ma loi ? As-tu relevé des traces ?" },
+                        { character: "LE GARDE", text: "Rien, chef. Rien qu'un pas plus léger qu'un passage d'oiseau. Après, en cherchant mieux, le garde Durand a trouvé plus loin une pelle, une petite pelle d'enfant toute vieille, toute rouillée. On a pensé que ça ne pouvait pas être un enfant qui avait fait le coup. Le première classe l'a gardée tout de même pour l'enquête.", isGuard: true },
+                        { character: "CRÉON", text: "Un enfant... L'opposition brisée qui sourd et mine déjà partout. Les amis de Polynice avec leur or bloqué dans Thèbes, les chefs de la plèbe puant l'ail, soudainement alliés aux princes, et les prêtres essayant de pêcher un petit quelque chose au milieu de tout cela... Un enfant! Ils ont dû penser que cela serait plus touchant. Je le vois d'ici, leur enfant, avec sa gueule de tueur appointé et la petite pelle soigneusement enveloppée dans du papier sous sa veste. A moins qu'ils n'aient dressé un vrai enfant, avec des phrases... Une innocence inestimable pour le parti. Un vrai petit garçon pâle qui crachera devant mes fusils. Un précieux sang bien frais sur mes mains, double aubaine. Mais ils ont des complices, et dans ma garde peut-être. Ecoute bien, toi..." },
+                        { character: "LE GARDE", text: "Chef, on a fait tout ce qu'on devait faire! Durand s'est assis une demi heure parce qu'il avait mal aux pieds, mais moi, chef, je suis resté tout le temps debout. Le première classe vous le dira.", isGuard: true },
+                        { character: "CRÉON", text: "A qui avez-vous déjà parlé de cette affaire?" },
+                        { character: "LE GARDE", text: "A personne, chef. On a tout de suite tiré au sort, et je suis venu.", isGuard: true },
+                        { character: "CRÉON", text: "Ecoute bien. Votre garde est doublée. Renvoyez la relève. Voilà l'ordre. Je ne veux que vous près du cadavre. Et pas un mot. Vous êtes coupables d'une négligence, vous serez punis de toute façon, mais si tu parles, si le bruit court dans la ville qu'on a recouvert le cadavre de Polynice, vous mourrez tous les trois." },
+                        { character: "LE GARDE", text: "On n'a pas parlé, chef, je vous le jure ! Mais moi, j'étais ici et peut-être que les autres ils l'ont déjà dit à la relève... Chef, j'ai deux enfants. Il y en a un qui est tout petit. Vous témoignerez pour moi que j'étais ici, chef, devant le conseil de guerre. J'étais ici, moi, avec vous ! J'ai un témoin! Si on a parlé, ça sera les autres, ça ne sera pas moi ! J'ai un témoin, moi !", isGuard: true },
+                        { character: "CRÉON", text: "Va vite. Si personne ne sait, tu vivras." }
+                    ]
+                },
+                {
+                    title: "Scène 2 : L'arrestation d'Antigone",
+                    lines: [
+                        { character: "LE GARDE", text: "Allez, allez, pas d'histoires ! Vous vous expliquerez devant le chef. Moi, je ne connais que la consigne. Ce que vous aviez à faire là, je ne veux pas le savoir. Tout le monde a des excuses, tout le monde a quelque chose à objecter. S'il fallait écouter les gens, s'il fallait essayer de comprendre, on serait propres. Allez, allez ! Tenez-la, vous autres, et pas d'histoires ! Moi, ce qu'elle a à dire, je ne veux pas le savoir !", isGuard: true },
+                        { character: "ANTIGONE", text: "Dis-leur de me lâcher, avec leurs sales mains. Ils me font mal." },
+                        { character: "LE GARDE", text: "Leurs sales mains ? Vous pourriez être polie, Mademoiselle... Moi, je suis poli.", isGuard: true },
+                        { character: "ANTIGONE", text: "Dis-leur de me lâcher. Je suis la fille d'Œdipe, je suis Antigone. Je ne me sauverai pas." },
+                        { character: "LE GARDE", text: "La fille d'Œdipe, oui ! Les putains qu'on ramasse à la garde de nuit, elles disent aussi de se méfier, qu'elles sont la bonne amie du préfet de police !", isGuard: true },
+                        { character: "ANTIGONE", text: "Je veux bien mourir, mais pas qu'ils me touchent !" },
+                        { character: "LE GARDE", text: "Et les cadavres, dis, et la terre, ça ne te fait pas peur à toucher ? Tu dis leurs sales mains. Regarde un peu les tiennes.", isGuard: true },
+                        { character: "LE GARDE", text: "On te l'avait prise, ta pelle ? Il a fallu que tu refasses ça avec tes ongles, la deuxième fois ? Ah ! cette audace ! Je tourne le dos une seconde, je te demande une chique, et allez, le temps de me la caler dans la joue, le temps de dire merci, elle était là, à gratter comme une petite hyène. Et en plein jour ! Et c'est qu'elle se débattait cette garce, quand j'ai voulu la prendre! C'est qu'elle voulait me sauter aux yeux ! Elle criait qu'il fallait qu'elle finisse... C'est une folle, oui !", isGuard: true },
+                        { character: "ANTIGONE", text: "Je voudrais m'asseoir un peu, s'il vous plaît." },
+                        { character: "LE GARDE", text: "C'est bon, qu'elle s'asseye. Mais ne la lâchez pas, vous autres.", isGuard: true },
+                        { character: "LE GARDE", text: "Garde à vous !", isGuard: true },
+                        { character: "CRÉON", text: "Lâchez cette jeune fille. Qu'est-ce que c'est ?" },
+                        { character: "LE GARDE", text: "C'est le piquet de garde, chef. On est venu avec les camarades.", isGuard: true },
+                        { character: "CRÉON", text: "Qui garde le corps ?" },
+                        { character: "LE GARDE", text: "On a appelé la relève, chef.", isGuard: true },
+                        { character: "CRÉON", text: "Je t'avais dit de la renvoyer ! Je t'avais dit de ne rien dire." },
+                        { character: "LE GARDE", text: "On n'a rien dit, chef. Mais comme on a arrêté celle-là, on a pensé qu'il fallait qu'on vienne. Et cette fois on n'a pas tiré au sort. On a préféré venir tous les trois.", isGuard: true },
+                        { character: "CRÉON", text: "Imbéciles ! Où t'ont-ils arrêtée ?" },
+                        { character: "LE GARDE", text: "Près du cadavre, chef.", isGuard: true },
+                        { character: "CRÉON", text: "Qu'allais-tu faire près du cadavre de ton frère ? Tu savais que j'avais interdit de l'approcher." },
+                        { character: "LE GARDE", text: "Ce qu'elle faisait, chef? C'est pour ça qu'on vous l'amène. Elle grattait la terre avec ses mains. Elle était en train de le recouvrir encore une fois.", isGuard: true },
+                        { character: "CRÉON", text: "Sais-tu bien ce que tu es en train de dire, toi ?" },
+                        { character: "LE GARDE", text: "Chef, vous pouvez demander aux autres. On avait dégagé le corps à mon retour ; mais avec le soleil qui chauffait, comme il commençait à sentir, on s'était mis sur une petite hauteur, pas loin, pour être dans le vent. On se disait qu'en plein jour on ne risquait rien. Pourtant on avait décidé, pour être plus sûrs, qu'il y en aurait toujours un de nous trois qui le regarderait. Mais à midi, en plein soleil, et puis avec l'odeur qui montait depuis que le vent était tombé, c'était comme un coup de massue. J'avais beau écarquiller les yeux, ça tremblait comme de la gélatine, je voyais plus. Je vais au camarade lui demander une chique pour passer ça... Le temps que je me la cale à la joue, chef, le temps que je lui dise merci, je me retourne : elle était là à gratter avec ses mains. En plein jour ! Elle devait bien penser qu'on ne pouvait pas ne pas la voir. Et quand elle a vu que je lui courais dessus, vous croyez qu'elle s'est arrêtée, qu'elle a essayé de se sauver peut-être ? Non. Elle a continué de toutes ses forces aussi vite qu'elle pouvait, comme si elle ne me voyait pas arriver. Et quand je l'ai empoignée, elle se débattait comme une diablesse, elle voulait continuer encore, elle me criait de la laisser, que le corps n'était pas encore tout à fait recouvert...", isGuard: true },
+                        { character: "CRÉON", text: "C'est vrai ?" },
+                        { character: "ANTIGONE", text: "Oui, c'est vrai." },
+                        { character: "LE GARDE", text: "On a découvert le corps, comme de juste, et puis on a passé la relève, sans parler de rien, et on est venu vous l'amender, chef. Voilà.", isGuard: true },
+                        { character: "CRÉON", text: "Et cette nuit, la première fois, c'était toi aussi ?" },
+                        { character: "ANTIGONE", text: "Oui. C'était moi. Avec une petite pelle de fer qui nous servait à faire des châteaux de sable sur la plage, pendant les vacances. C'était justement la pelle de Polynice. Il avait gravé son nom au couteau sur le manche. C'est pour cela que je l'ai laissée près de lui. Mais ils l'ont prise. Alors, la seconde fois, j'ai dû recommencer avec mes mains." },
+                        { character: "LE GARDE", text: "On aurait dit une petite bête qui grattait. Même qu'au premier coup d'œil, avec l'air chaud qui tremblait, le camarade dit : 'Mais non, c'est une bête.' 'Penses-tu, je lui dis, c'est trop fin pour une bête. C'est une fille'", isGuard: true },
+                        { character: "CRÉON", text: "C'est bien. On vous demandera peut-être un rapport tout à l'heure. Pour le moment, laissez-moi seul avec elle. Conduis ces hommes à côté, petit. Et qu'ils restent au secret jusqu'à ce que je revienne les voir." },
+                        { character: "LE GARDE", text: "Faut-il lui remettre les menottes, chef?", isGuard: true },
+                        { character: "CRÉON", text: "Non." }
+                    ]
+                },
+                {
+                    title: "Scène 3 : La lettre d'Antigone",
+                    lines: [
+                        { character: "CRÉON", text: "Oui, nous sommes tous touchés à mort." },
+                        { character: "LE GARDE", text: "Chef, ils envahissent le palais !", isGuard: true },
+                        { character: "ANTIGONE", text: "Créon, je ne veux plus voir leurs visages, je ne veux plus entendre leurs cris, je ne veux plus voir personne ! Tu as ma mort maintenant, c'est assez. Fais que je ne voie plus personne jusqu'à ce que ce soit fini." },
+                        { character: "CRÉON", text: "La garde aux portes ! Qu'on vide le palais ! Reste ici avec elle, toi." },
+                        { character: "ANTIGONE", text: "Alors, c'est toi ?" },
+                        { character: "LE GARDE", text: "Qui, moi ?", isGuard: true },
+                        { character: "ANTIGONE", text: "Mon dernier visage d'homme." },
+                        { character: "LE GARDE", text: "Faut croire.", isGuard: true },
+                        { character: "ANTIGONE", text: "Que je te regarde..." },
+                        { character: "LE GARDE", text: "Ça va.", isGuard: true },
+                        { character: "ANTIGONE", text: "C'est toi qui m'as arrêtée, tout à l'heure ?" },
+                        { character: "LE GARDE", text: "Oui, c'est moi.", isGuard: true },
+                        { character: "ANTIGONE", text: "Tu m'as fait mal. Tu n'avais pas besoin de me faire mal. Est-ce que j'avais l'air de vouloir me sauver ?" },
+                        { character: "LE GARDE", text: "Allez, allez, pas d'histoires ! Si ce n'était pas vous, c'était moi qui y passais.", isGuard: true },
+                        { character: "ANTIGONE", text: "Quel âge as-tu ?" },
+                        { character: "LE GARDE", text: "Trente-neuf ans.", isGuard: true },
+                        { character: "ANTIGONE", text: "Tu as des enfants ?" },
+                        { character: "LE GARDE", text: "Oui, deux.", isGuard: true },
+                        { character: "ANTIGONE", text: "Tu les aimes ?" },
+                        { character: "LE GARDE", text: "Cela ne vous regarde pas.", isGuard: true },
+                        { character: "ANTIGONE", text: "Il y a longtemps que vous êtes garde ?" },
+                        { character: "LE GARDE", text: "Après la guerre. J'étais sergent. J'ai rengagé.", isGuard: true },
+                        { character: "ANTIGONE", text: "Il faut être sergent pour être garde ?" },
+                        { character: "LE GARDE", text: "En principe, oui. Sergent ou avoir suivi le peloton spécial. Devenu garde, le sergent perd son grade. Un exemple : je rencontre une recrue de l'armée, elle peut ne pas me saluer.", isGuard: true },
+                        { character: "ANTIGONE", text: "Ah oui ?" },
+                        { character: "LE GARDE", text: "Oui. Remarquez que, généralement, elle le fait. La recrue sait que le garde est un gradé. Question solde : on a la solde ordinaire du garde, comme ceux du peloton spécial, et, pendant six mois, à titre de gratification, un rappel de supplément de la solde de sergent. Seulement, comme garde, on a d'autres avantages. Logement, chauffage, allocations. Finalement, le garde marié avec deux enfants arrive à se faire plus que le sergent de l'active.", isGuard: true },
+                        { character: "ANTIGONE", text: "Ah oui ?" },
+                        { character: "LE GARDE", text: "Oui. C'est ce qui vous explique la rivalité entre le garde et le sergent. Vous avez peut-être pu remarquer que le sergent affecte de mépriser le garde. Leur grand argument, c'est l'avancement. D'un sens, c'est juste. L'avancement du garde est plus lent et plus difficile que dans l'armée. Mais vous ne devez pas oublier qu'un brigadier des gardes, c'est autre chose qu'un sergent chef.", isGuard: true },
+                        { character: "ANTIGONE", text: "Ecoute..." },
+                        { character: "LE GARDE", text: "Oui...", isGuard: true },
+                        { character: "ANTIGONE", text: "Je vais mourir tout à l'heure." },
+                        { character: "LE GARDE", text: "D'un autre côté, on a plus de considération pour le garde que pour le sergent de l'active. Le garde, c'est un soldat, mais c'est presque un fonctionnaire.", isGuard: true },
+                        { character: "ANTIGONE", text: "Tu crois qu'on a mal pour mourir ?" },
+                        { character: "LE GARDE", text: "Je ne peux pas vous dire. Pendant la guerre, ceux qui étaient touchés au ventre, ils avaient mal. Moi, je n'ai jamais été blessé. Et, d'un sens, ça m'a nui pour l'avancement.", isGuard: true },
+                        { character: "ANTIGONE", text: "Comment vont-ils me faire mourir ?" },
+                        { character: "LE GARDE", text: "Je ne sais pas. Je crois que j'ai entendu dire que pour ne pas souiller la ville de votre sang, ils allaient vous murer dans un trou.", isGuard: true },
+                        { character: "ANTIGONE", text: "Vivante ?" },
+                        { character: "LE GARDE", text: "Oui, d'abord.", isGuard: true },
+                        { character: "ANTIGONE", text: "Ô tombeau ! Ô lit nuptial! Ô ma demeure souterraine !... Toute seule..." },
+                        { character: "LE GARDE", text: "Aux cavernes de Hadès, aux portes de la ville. En plein soleil. Une drôle de corvée encore pour ceux qui seront de faction. Il avait d'abord été question d'y mettre l'armée. Mais, aux dernières nouvelles, il paraît que c'est encore la garde qui fournira les piquets. Elle a bon dos, la garde ! Etonnez-vous après qu'il existe une jalousie entre le garde et le sergent d'active...", isGuard: true },
+                        { character: "ANTIGONE", text: "Deux bêtes..." },
+                        { character: "LE GARDE", text: "Quoi, deux bêtes ?", isGuard: true },
+                        { character: "ANTIGONE", text: "Des bêtes se serreraient l'une contre l'autre pour se faire chaud. Je suis toute seule." },
+                        { character: "LE GARDE", text: "Si vous avez besoin de quelque chose, c'est différent. Je peux appeler.", isGuard: true },
+                        { character: "ANTIGONE", text: "Non. Je voudrais seulement que tu remettes une lettre à quelqu'un quand je serai morte." },
+                        { character: "LE GARDE", text: "Comment ça, une lettre ?", isGuard: true },
+                        { character: "ANTIGONE", text: "Une lettre que j'écrirai." },
+                        { character: "LE GARDE", text: "Ah! ça non ! Pas d'histoires ! Une lettre ! Comme vous y allez, vous ! Je risquerais gros, moi, à ce petit jeu-là !", isGuard: true },
+                        { character: "ANTIGONE", text: "Je te donnerai cet anneau si tu acceptes." },
+                        { character: "LE GARDE", text: "C'est de l'or ?", isGuard: true },
+                        { character: "ANTIGONE", text: "Oui. C'est de l'or." },
+                        { character: "LE GARDE", text: "Vous comprenez, si on me fouille, moi, c'est le conseil de guerre. Cela vous est égal à vous ? Ce que je peux, si vous voulez, c'est écrire sur mon carnet ce que vous auriez voulu dire. Après, j'arracherai la page. De mon écriture, ce n'est pas pareil.", isGuard: true },
+                        { character: "ANTIGONE", text: "Ton écriture... C'est trop laid, tout cela, tout est trop laid." },
+                        { character: "LE GARDE", text: "Vous savez, si vous ne voulez pas, moi...", isGuard: true },
+                        { character: "ANTIGONE", text: "Si. Garde la bague et écris. Mais fais vite... J'ai peur que nous n'ayons plus le temps... Ecris : Mon chéri..." },
+                        { character: "LE GARDE", text: "C'est pour votre bon ami ?", isGuard: true },
+                        { character: "ANTIGONE", text: "Mon chéri, j'ai voulu mourir et tu ne vas peut-être plus m'aimer..." },
+                        { character: "LE GARDE", text: "Mon chéri, j'ai voulu mourir et tu ne vas peut-être plus m'aimer...", isGuard: true },
+                        { character: "ANTIGONE", text: "Et Créon avait raison, c'est terrible, maintenant, à côté de cet homme, je ne sais plus pourquoi je meurs. J'ai peur..." },
+                        { character: "LE GARDE", text: "Créon avait raison, c'est terrible...", isGuard: true },
+                        { character: "ANTIGONE", text: "Oh ! Hémon, notre petit garçon. Je le comprends seulement maintenant combien c'était simple de vivre..." },
+                        { character: "LE GARDE", text: "Eh ! dites, vous allez trop vite. Comment voulez-vous que j'écrive ? Il faut le temps tout de même...", isGuard: true },
+                        { character: "ANTIGONE", text: "Où en étais-tu ?" },
+                        { character: "LE GARDE", text: "C'est terrible maintenant à côté de cet homme...", isGuard: true },
+                        { character: "ANTIGONE", text: "Je ne sais plus pourquoi je meurs." },
+                        { character: "LE GARDE", text: "Je ne sais plus pourquoi je meurs... On ne sait jamais pourquoi on meurt.", isGuard: true },
+                        { character: "ANTIGONE", text: "J'ai peur... Non. Raye tout cela. Il vaut mieux que jamais personne ne sache. C'est comme s'ils devaient me voir nue et me toucher quand je serai morte. Mets seulement : Pardon." },
+                        { character: "LE GARDE", text: "Alors, je raye la fin et je mets pardon à la place ?", isGuard: true },
+                        { character: "ANTIGONE", text: "Oui. Pardon, mon chéri. Sans la petite Antigone, vous auriez tous été bien tranquilles. Je t'aime..." },
+                        { character: "LE GARDE", text: "Sans la petite Antigone, vous auriez tous été bien tranquilles. Je t'aime... c'est tout ?", isGuard: true },
+                        { character: "ANTIGONE", text: "Oui, c'est tout." },
+                        { character: "LE GARDE", text: "C'est une drôle de lettre.", isGuard: true },
+                        { character: "ANTIGONE", text: "Oui, c'est une drôle de lettre." },
+                        { character: "LE GARDE", text: "Et c'est à qui qu'elle est adressée ?", isGuard: true },
+                        { character: "LE GARDE", text: "Allez ! pas d'histoires !", isGuard: true }
+                    ]
+                },
+                {
+                    title: "Scène 4 : La mort d'Antigone et d'Hémon",
+                    lines: [
+                        { character: "LE CHŒUR", text: "Que lui veux-tu ? Qu'as-tu à lui apprendre ?" },
+                        { character: "LE MESSAGER", text: "Une terrible nouvelle. On venait de jeter Antigone dans son trou. On n'avait pas encore fini de rouler les derniers blocs de pierre lorsque Créon et tous ceux qui l'entourent entendent des plaintes qui sortent soudain du tombeau. Chacun se tait et écoute, car ce n'est pas la voix d'Antigone. C'est une plainte nouvelle qui sort des profondeurs du trou. Tous regardent Créon, et lui qui a deviné le premier, lui qui sait déjà avant tous les autres, hurle soudain comme un fou: Enlevez les pierres ! Enlevez les pierres ! Les esclaves se jettent sur les blocs entassés et, parmi eux, le roi suant, dont les mains saignent. Les pierres bougent enfin et le plus mince se glisse dans l'ouverture. Antigone est au fond de la tombe pendue aux fils de sa ceinture, des fils bleus, des fils verts, des fils rouges qui lui font comme un collier d'enfant, et Hémon à genoux qui la tient dans ses bras et gémit, le visage enfoui dans sa robe. On bouge un bloc encore et Créon peut enfin descendre. On voit ses cheveux blancs dans l'ombre, au fond du trou. Il essaie de relever Hémon, il le supplie. Hémon ne l'entend pas. Puis soudain il se dresse, les yeux noirs, et il n'a jamais tant ressemblé au petit garçon d'autrefois, il regarde son père sans rien dire, une minute, et, tout à coup, il lui crache au visage, et tire son épée. Créon a bondi hors de portée. Alors Hémon le regarde avec ses yeux d'enfant, lourds de mépris, et Créon ne peut pas éviter ce regard comme la lame. Hémon regarde ce vieil homme tremblant à l'autre bout de la caverne et, sans rien dire, il se plonge l'épée dans le ventre et il s'étend contre Antigone, l'embrassant dans une immense flaque rouge.", isGuard: true }
+                    ]
+                }
+            ];
+
+            useEffect(() => {
+                const loadVoices = () => {
+                    const availableVoices = window.speechSynthesis.getVoices();
+                    setVoices(availableVoices);
+                    
+                    // Chercher les meilleures voix françaises
+                    const frenchVoices = availableVoices.filter(v => v.lang.startsWith('fr'));
+                    
+                    // Prioriser les voix de qualité (Google, Microsoft)
+                    const findBestVoice = (gender) => {
+                        const premium = frenchVoices.find(v => 
+                            (v.name.includes('Google') || v.name.includes('Microsoft') || v.name.includes('Premium')) &&
+                            (gender === 'male' ? v.name.includes('Male') || v.name.includes('Thomas') || v.name.includes('Henri') || v.name.includes('Paul') || v.name.includes('Jean') || v.name.includes('Pierre') : 
+                             v.name.includes('Female') || v.name.includes('Amélie') || v.name.includes('Marie') || v.name.includes('Sophie') || v.name.includes('Julie'))
+                        );
+                        if (premium) return premium;
+                        // Fallback: try to find by name, else assume second voice is male, first female
+                        const byName = frenchVoices.find(v => gender === 'male' ? 
+                            (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('homme') || !v.name.toLowerCase().includes('female') && !v.name.toLowerCase().includes('femme')) : 
+                            (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('femme'))
+                        );
+                        return byName || (gender === 'male' ? frenchVoices[0] : frenchVoices[1] || frenchVoices[0]);
+                    };
+
+                    if (frenchVoices.length > 0) {
+                        const maleVoice = findBestVoice('male');
+                        const femaleVoice = findBestVoice('female');
+                        
+                        setSelectedVoices({
+                            'CRÉON': maleVoice?.name || frenchVoices[0]?.name,
+                            'ANTIGONE': femaleVoice?.name || frenchVoices[1]?.name || frenchVoices[0]?.name,
+                            'LE GARDE': maleVoice?.name || frenchVoices[0]?.name,
+                            'LE MESSAGER': maleVoice?.name || frenchVoices[0]?.name,
+                            'LE CHŒUR': maleVoice?.name || frenchVoices[0]?.name
+                        });
+                    }
+                };
+
+                loadVoices();
+                window.speechSynthesis.onvoiceschanged = loadVoices;
+            }, []);
+
+            // Speak text while inserting pauses based on punctuation.
+            // Comma/semicolon -> 500ms, period/!/? -> 1500ms, otherwise short gap.
+            const speakWithPunctuationPauses = (text, opts = {}, onFinished) => {
+                const { voiceName, pitch = 1, lang = 'fr-FR', rate = speechRate, commaPause: optComma, sentencePause: optSentence } = opts;
+                window.speechSynthesis.cancel();
+
+                const parts = text.match(/[^,;.!?]+[.,;!?;]?/g) || [text];
+                let i = 0;
+
+                const commaMs = (optComma !== undefined ? optComma : commaPause) * 1000;
+                const sentenceMs = (optSentence !== undefined ? optSentence : sentencePause) * 1000;
+
+                const next = () => {
+                    if (i >= parts.length) {
+                        if (typeof onFinished === 'function') onFinished();
+                        return;
+                    }
+
+                    const raw = parts[i];
+                    const part = raw.trim();
+                    i += 1;
+
+                    if (!part) return next();
+
+                    const lastChar = raw.slice(-1);
+                    let pause = 50;
+                    if (lastChar === ',' || lastChar === ';') pause = commaMs;
+                    else if (lastChar === '.' || lastChar === '!' || lastChar === '?') pause = sentenceMs;
+
+                    const u = new SpeechSynthesisUtterance(part);
+                    u.lang = lang;
+                    u.rate = rate;
+                    u.pitch = pitch;
+                    if (voiceName) {
+                        const v = voices.find(vv => vv.name === voiceName);
+                        if (v) u.voice = v;
+                    }
+
+                    utteranceRef.current = u;
+                    u.onend = () => setTimeout(next, pause);
+                    window.speechSynthesis.speak(u);
+                };
+
+                next();
+            };
+
+            const speakGuardLine = (text) => {
+                const voiceName = selectedVoices[currentLineData.character];
+                speakWithPunctuationPauses(text, { voiceName, pitch: 0.50 }, () => {});
+            };
+
+            const speak = (text, character) => {
+                if (character === "LE GARDE") return;
+
+                const voiceName = selectedVoices[character];
+                const pitch = character === 'CRÉON' ? 0.75 : 1.1;
+
+                speakWithPunctuationPauses(text, { voiceName, pitch, rate: speechRate }, () => {
+                    if (currentLine < scenes[currentScene].lines.length - 1) {
+                        setTimeout(() => setCurrentLine(prev => prev + 1), 600);
+                    } else {
+                        setIsPlaying(false);
+                    }
+                });
+            };
+
+            useEffect(() => {
+                if (isPlaying) {
+                    const line = scenes[currentScene].lines[currentLine];
+                    if (!line.isGuard) {
+                        speak(line.text, line.character);
+                    } else {
+                        setIsPlaying(false);
+                    }
+                } else {
+                    window.speechSynthesis.cancel();
+                }
+            }, [currentLine, isPlaying, currentScene]);
+
+            const handleNext = () => {
+                setRevealedLine(false);
+                if (currentLine < scenes[currentScene].lines.length - 1) {
+                    setCurrentLine(prev => prev + 1);
+                    setIsPlaying(true);
+                } else {
+                    setIsPlaying(false);
+                }
+            };
+
+            const handlePrevious = () => {
+                setRevealedLine(false);
+                if (currentLine > 0) {
+                    setCurrentLine(prev => prev - 1);
+                    setIsPlaying(false);
+                    window.speechSynthesis.cancel();
+                }
+            };
+
+            const handleReset = () => {
+                setIsPlaying(false);
+                setCurrentLine(0);
+                setRevealedLine(false);
+                window.speechSynthesis.cancel();
+            };
+
+
+
+            const currentLineData = scenes[currentScene].lines[currentLine];
+
+            return React.createElement('div', { 
+                className: "min-h-screen p-4",
+                onTouchStart: handleTouchStart,
+                onTouchEnd: handleTouchEnd
+            },
+                React.createElement('div', { className: "max-w-4xl mx-auto main-container" },
+                    // Header
+                    React.createElement('div', { className: "text-center mb-8 pt-4" },
+                        React.createElement('h1', { className: "text-4xl font-bold mb-2" }, 'Antigone TRAE'),
+                        React.createElement('p', { className: "text-purple-300 text-lg" }, 'Répétition Mobile - Le Garde'),
+                        
+                        // Indicateur de gestes
+                        showSwipeHint && React.createElement('div', { className: "mt-4 flex items-center justify-center gap-2 swipe-hint" },
+                            React.createElement(SwipeHintIcon),
+                            React.createElement('span', { className: "text-sm text-purple-300" }, 'Swipe gauche/droite pour naviguer')
+                        )
+                    ),
+
+                    // Scene Selector
+                    React.createElement('div', { className: "mb-6" },
+                        React.createElement('div', { className: "flex gap-2 overflow-x-auto pb-2" },
+                            scenes.map((scene, idx) =>
+                                React.createElement('button', {
+                                    key: idx,
+                                    onClick: () => {
+                                        setCurrentScene(idx);
+                                        setCurrentLine(0);
+                                        setIsPlaying(false);
+                                        setRevealedLine(false);
+                                        window.speechSynthesis.cancel();
+                                    },
+                                    className: `px-4 py-3 rounded-lg whitespace-nowrap transition-all mobile-tap-area ${
+                                        currentScene === idx
+                                            ? 'bg-purple-600 shadow-lg shadow-purple-500/50'
+                                            : 'bg-slate-700 hover:bg-slate-600'
+                                    }`
+                                }, `Scène ${idx + 1}`)
+                            )
+                        ),
+                        React.createElement('p', { className: "text-sm text-purple-300 mt-2" }, scenes[currentScene].title)
+                    ),
+
+                    // Main Display
+                    React.createElement('div', { className: "bg-slate-800/50 backdrop-blur rounded-2xl p-6 mb-6 min-h-[300px] border border-purple-500/20" },
+                        React.createElement('div', { className: "flex items-start gap-4 mb-4" },
+                            React.createElement('div', { 
+                                className: `px-3 py-1 rounded-full text-sm font-semibold ${
+                                    currentLineData.isGuard 
+                                        ? 'bg-green-600' 
+                                        : currentLineData.character === 'CRÉON'
+                                        ? 'bg-red-600'
+                                        : 'bg-blue-600'
+                                }`
+                            }, currentLineData.character),
+                            React.createElement('div', { className: "text-purple-300 text-sm" },
+                                `${currentLine + 1} / ${scenes[currentScene].lines.length}`
+                            )
+                        ),
+
+                        React.createElement('div', { className: "text-xl leading-relaxed mobile-text" },
+                            currentLineData.isGuard ? 
+                                React.createElement('div', {
+                                    className: `bg-green-900/30 border-l-4 border-green-500 p-4 rounded transition-all ${
+                                        !revealedLine && !showPrompter ? 'cursor-pointer hover:bg-green-900/40' : ''
+                                    }`
+                                },
+                                    React.createElement('div', { className: "flex justify-between items-center mb-2" },
+                                        React.createElement('p', { className: "text-green-100 font-semibold" }, '🎭 VOTRE RÉPLIQUE'),
+                                        showPrompter && React.createElement('div', { className: "flex items-center gap-2" },
+                                            prompterState === 'hidden' ? React.createElement(EyeOffIcon) : 
+                                            prompterState === 'hint' ? React.createElement(EyeIcon) :
+                                            prompterState === 'audio' ? React.createElement(Volume2Icon) : React.createElement(EyeIcon),
+                                            React.createElement('span', { className: "text-xs text-green-300" },
+                                                prompterState === 'hidden' ? `Indice dans ${prompterTimer}s` :
+                                                prompterState === 'hint' ? 'Indice : 2 premiers mots' :
+                                                prompterState === 'audio' ? 'Lecture en cours' : 'Texte complet'
+                                            )
+                                        )
+                                    ),
+                                    (revealedLine || showPrompter) ? 
+                                        React.createElement('div', null,
+                                            React.createElement('p', { 
+                                                className: `cursor-pointer transition-colors mobile-tap-area ${
+                                                    prompterState === 'audio' ? 'text-green-300' : 'text-white hover:text-green-200'
+                                                }`,
+                                                onClick: showPrompter ? handlePrompterClick : () => speakGuardLine(currentLineData.text),
+                                                title: showPrompter ? 
+                                                    (prompterState === 'hidden' || prompterState === 'hint' ? 'Cliquer pour voir le texte complet' :
+                                                     prompterState === 'full' ? 'Cliquer pour écouter' : 'Cliquer pour voir le texte') :
+                                                    'Cliquer pour entendre'
+                                            }, 
+                                                showPrompter ? getPrompterText(currentLineData.text) : currentLineData.text
+                                            ),
+                                            !showPrompter && React.createElement('p', { className: "text-green-300/70 text-sm mt-2 italic" }, 
+                                                '🔊 Cliquez sur le texte pour l\'entendre'
+                                            )
+                                        ) :
+                                        React.createElement('p', { 
+                                            className: "text-green-300/50 italic text-center py-8 mobile-tap-area",
+                                            onClick: () => setRevealedLine(true)
+                                        }, 'Cliquez pour révéler votre texte')
+                                ) :
+                                React.createElement('p', { className: "text-gray-200" }, currentLineData.text)
+                        )
+                    ),
+
+                    // Controls
+                    React.createElement('div', { className: "flex justify-center gap-4 mb-6 mobile-controls" },
+                        React.createElement('button', {
+                            onClick: handleReset,
+                            className: "p-5 bg-slate-700 hover:bg-slate-600 rounded-full transition-all mobile-tap-area control-button",
+                            title: "Recommencer"
+                        }, React.createElement(RotateCcwIcon)),
+                        
+                        React.createElement('button', {
+                            onClick: handlePrevious,
+                            className: "p-5 bg-slate-700 hover:bg-slate-600 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed mobile-tap-area control-button",
+                            disabled: currentLine === 0,
+                            title: "Précédent"
+                        }, React.createElement(SkipBackIcon)),
+
+                        React.createElement('button', {
+                            onClick: handleNext,
+                            className: "p-7 bg-purple-600 hover:bg-purple-500 rounded-full shadow-lg shadow-purple-500/50 transition-all mobile-tap-area control-button",
+                            title: "Suivant"
+                        }, React.createElement(SkipForwardIconContrast)),
+
+                        React.createElement('button', {
+                            onClick: () => setShowSettings(!showSettings),
+                            className: "p-5 bg-slate-700 hover:bg-slate-600 rounded-full transition-all mobile-tap-area control-button",
+                            title: "Réglages"
+                        }, React.createElement(SettingsIcon)),
+
+                        React.createElement('button', {
+                            onClick: toggleBookmark,
+                            className: `p-5 rounded-full transition-all mobile-tap-area control-button ${
+                                isBookmarked() 
+                                    ? 'bg-yellow-600 hover:bg-yellow-500' 
+                                    : 'bg-slate-700 hover:bg-slate-600'
+                            }`,
+                            title: isBookmarked() ? "Retirer le marque-page" : "Ajouter un marque-page"
+                        }, isBookmarked() ? React.createElement(BookmarkFilledIcon) : React.createElement(BookmarkIcon)),
+
+                        React.createElement('button', {
+                            onClick: () => setShowBookmarks(!showBookmarks),
+                            className: `p-5 rounded-full transition-all mobile-tap-area control-button ${
+                                showBookmarks 
+                                    ? 'bg-purple-600 hover:bg-purple-500' 
+                                    : 'bg-slate-700 hover:bg-slate-600'
+                            }`,
+                            title: "Voir les marque-pages"
+                        }, React.createElement(ListIcon)),
+
+                        React.createElement('button', {
+                            onClick: () => setShowPrompter(!showPrompter),
+                            className: `p-5 rounded-full transition-all mobile-tap-area control-button ${
+                                showPrompter 
+                                    ? 'bg-green-600 hover:bg-green-500' 
+                                    : 'bg-slate-700 hover:bg-slate-600'
+                            }`,
+                            title: showPrompter ? "Désactiver le souffleur" : "Activer le souffleur"
+                        }, React.createElement(PromptIcon)),
+
+
+                    ),
+
+                    // Settings Panel
+                    showSettings && React.createElement('div', { className: "bg-slate-800/90 backdrop-blur rounded-2xl p-6 mb-6 border border-purple-500/20" },
+                        React.createElement('h3', { className: "text-xl font-bold mb-4 flex items-center gap-2" },
+                            React.createElement('div', { className: "panel-title-icon" },
+                                React.createElement(Volume2Icon)
+                            ),
+                            'Réglages des voix'
+                        ),
+
+                        React.createElement('div', { className: "space-y-4" },
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "block mb-2" }, `Vitesse: ${speechRate.toFixed(2)}x`),
+                                React.createElement('input', {
+                                    type: "range",
+                                    min: "0.8",
+                                    max: "1.5",
+                                    step: "0.05",
+                                    value: speechRate,
+                                    onChange: (e) => {
+                                        setSpeechRate(parseFloat(e.target.value));
+                                        saveSettings();
+                                    },
+                                    className: "w-full"
+                                })
+                            ),
+
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "block mb-2" }, `Pause , / ; : ${commaPause.toFixed(2)}s`),
+                                React.createElement('input', {
+                                    type: "range",
+                                    min: "0",
+                                    max: "0.5",
+                                    step: "0.01",
+                                    value: commaPause,
+                                    onChange: (e) => {
+                                        setCommaPause(parseFloat(e.target.value));
+                                        saveSettings();
+                                    },
+                                    className: "w-full"
+                                })
+                            ),
+
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "block mb-2" }, `Pause . / ! / ? : ${sentencePause.toFixed(2)}s`),
+                                React.createElement('input', {
+                                    type: "range",
+                                    min: "0",
+                                    max: "1.5",
+                                    step: "0.01",
+                                    value: sentencePause,
+                                    onChange: (e) => {
+                                        setSentencePause(parseFloat(e.target.value));
+                                        saveSettings();
+                                    },
+                                    className: "w-full"
+                                })
+                            ),
+
+                            ['CRÉON', 'ANTIGONE', 'LE GARDE', 'LE MESSAGER', 'LE CHŒUR'].map(character =>
+                                React.createElement('div', { key: character },
+                                    React.createElement('label', { className: "block mb-2" }, character),
+                                    React.createElement('select', {
+                                        value: selectedVoices[character] || '',
+                                        onChange: (e) => {
+                                            setSelectedVoices({...selectedVoices, [character]: e.target.value});
+                                            saveSettings();
+                                        },
+                                        className: `w-full p-2 rounded border text-white transition-colors ${
+                                            selectedVoices[character] 
+                                                ? 'bg-purple-700 border-purple-500' 
+                                                : 'bg-slate-700 border-slate-600'
+                                        }`
+                                    },
+                                        React.createElement('option', { key: '', value: '' }, 'Sélectionner une voix...'),
+                                        voices.filter(v => v.lang.startsWith('fr')).map(voice =>
+                                            React.createElement('option', { key: voice.name, value: voice.name }, voice.name)
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    ),
+
+                    // Bookmarks Panel
+                    showBookmarks && React.createElement('div', { className: "bg-slate-800/90 backdrop-blur rounded-2xl p-6 mb-6 border border-purple-500/20" },
+                        React.createElement('h3', { className: "text-xl font-bold mb-4 flex items-center gap-2" },
+                            React.createElement('div', { className: "panel-title-icon" },
+                                React.createElement(BookmarkFilledIcon)
+                            ),
+                            `Marque-pages (${Object.keys(bookmarks).length})`
+                        ),
+
+                        Object.keys(bookmarks).length === 0 ? 
+                            React.createElement('p', { className: "text-gray-400 text-center py-4" }, 
+                                'Aucun marque-page. Cliquez sur l\'icône 📌 pour en ajouter.'
+                            ) :
+                            React.createElement('div', { className: "space-y-3 max-h-80 overflow-y-auto" },
+                                Object.entries(bookmarks).map(([key, bookmark]) => 
+                                    React.createElement('div', { 
+                                        key: key,
+                                        className: "bg-slate-700/50 rounded-lg p-4 border border-slate-600"
+                                    },
+                                        React.createElement('div', { className: "flex justify-between items-start mb-2" },
+                                            React.createElement('div', null,
+                                                React.createElement('span', { 
+                                                    className: `px-2 py-1 rounded text-xs font-semibold ${
+                                                        bookmark.character === 'LE GARDE' ? 'bg-green-600' : 
+                                                        bookmark.character === 'CRÉON' ? 'bg-red-600' : 'bg-blue-600'
+                                                    }`
+                                                }, bookmark.character),
+                                                React.createElement('span', { className: "text-sm text-gray-400 ml-2" },
+                                                    `Scène ${bookmark.scene + 1}, Ligne ${bookmark.line + 1}`
+                                                )
+                                            ),
+                                            React.createElement('button', {
+                                                onClick: () => removeBookmark(key),
+                                                className: "text-gray-400 hover:text-red-400 text-sm",
+                                                title: "Supprimer"
+                                            }, '×')
+                                        ),
+                                        React.createElement('p', { className: "text-gray-200 text-sm mb-2" }, bookmark.text),
+                                        React.createElement('div', { className: "flex justify-between items-center" },
+                                            React.createElement('span', { className: "text-xs text-gray-500" },
+                                                new Date(bookmark.date).toLocaleDateString('fr-FR')
+                                            ),
+                                            React.createElement('button', {
+                                                onClick: () => goToBookmark(bookmark.scene, bookmark.line),
+                                                className: "px-3 py-1 bg-purple-600 hover:bg-purple-500 rounded text-sm transition-all",
+                                                title: "Aller à cette réplique"
+                                            }, 'Aller →')
+                                        )
+                                    )
+                                )
+                            )
+                    ),
+
+                    // Prompter Settings Panel
+                    showPrompter && React.createElement('div', { className: "bg-slate-800/90 backdrop-blur rounded-2xl p-6 mb-6 border border-green-500/20" },
+                        React.createElement('h3', { className: "text-xl font-bold mb-4 flex items-center gap-2" },
+                            React.createElement('div', { className: "panel-title-icon" },
+                                React.createElement(PromptIcon)
+                            ),
+                            'Paramètres du souffleur'
+                        ),
+
+                        React.createElement('div', { className: "space-y-6" },
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "block mb-2 font-semibold" }, 
+                                    `Délai avant indice: ${prompterTimer} seconde${prompterTimer > 1 ? 's' : ''}`
+                                ),
+                                React.createElement('input', {
+                                    type: "range",
+                                    min: "1",
+                                    max: "10",
+                                    step: "1",
+                                    value: prompterTimer,
+                                    onChange: (e) => {
+                                        setPrompterTimer(parseInt(e.target.value));
+                                        savePrompterSettings();
+                                    },
+                                    className: "w-full"
+                                }),
+                                React.createElement('div', { className: "flex justify-between text-xs text-gray-400 mt-1" },
+                                    React.createElement('span', null, '1s'),
+                                    React.createElement('span', null, '5s'),
+                                    React.createElement('span', null, '10s')
+                                )
+                            ),
+
+                            React.createElement('div', { className: "bg-green-900/30 p-4 rounded-lg" },
+                                React.createElement('h4', { className: "font-semibold mb-2 text-green-200" }, 'Comment ça marche ?'),
+                                React.createElement('ul', { className: "text-sm text-gray-300 space-y-1" },
+                                    React.createElement('li', null, '1. Activez le souffleur (bouton vert)'),
+                                    React.createElement('li', null, '2. Révélez une réplique (cliquez sur le texte)'),
+                                    React.createElement('li', null, '3. Attendez le délai → 2 premiers mots apparaissent'),
+                                    React.createElement('li', null, '4. Cliquez sur le texte → texte complet'),
+                                    React.createElement('li', null, '5. Recliquez → écoutez la lecture audio'),
+                                    React.createElement('li', null, '6. Recliquez encore → retour au texte')
+                                ),
+                                React.createElement('div', { className: "mt-3 p-3 bg-green-800/30 rounded" },
+                                    React.createElement('p', { className: "text-sm font-medium text-green-200" }, 'Exemple :'),
+                                    React.createElement('p', { className: "text-sm text-gray-300 mt-1" }, 
+                                        '"Garde Jonas, de la Deuxième Compagnie."'
+                                    ),
+                                    React.createElement('p', { className: "text-sm text-gray-300 mt-1" }, 
+                                        '→ Indice : "Garde Jonas" + _______________'
+                                    )
+                                )
+                            )
+                        )
+                    ),
+
+                    // Scene Progress
+                    React.createElement('div', { className: "bg-slate-800/50 backdrop-blur rounded-lg p-4" },
+                        React.createElement('div', { className: "w-full bg-slate-700 rounded-full h-2" },
+                            React.createElement('div', {
+                                className: "bg-purple-600 h-2 rounded-full transition-all duration-300",
+                                style: { width: `${((currentLine + 1) / scenes[currentScene].lines.length) * 100}%` }
+                            })
+                        )
+                    )
+                )
+            );
+        };
+
+        ReactDOM.render(
+            React.createElement(AntigoneRehearsal),
+            document.getElementById('root')
+        );
+    </script>
+</body>
+</html>
