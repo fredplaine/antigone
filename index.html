@@ -274,6 +274,10 @@
             const [guardSpeechState, setGuardSpeechState] = useState('idle'); // 'idle', 'playing', 'paused'
             const utteranceRef = useRef(null);
             const rootRef = useRef(null);
+            const guardChunksRef = useRef(null);
+            const guardChunkIndexRef = useRef(0);
+            const guardTimeoutRef = useRef(null);
+            const guardSpeechOptsRef = useRef(null);
 
             // Charger les paramètres sauvegardés
             useEffect(() => {
@@ -737,22 +741,79 @@
                 next();
             };
 
+            const speakGuardFromChunk = (chunks, startIndex, opts, onFinished) => {
+                const { voiceName, pitch = 1, lang = 'fr-FR' } = opts;
+                let i = startIndex;
+                const commaMs = commaPause * 1000;
+                const sentenceMs = sentencePause * 1000;
+
+                const next = () => {
+                    if (i >= chunks.length) {
+                        guardChunkIndexRef.current = 0;
+                        if (typeof onFinished === 'function') onFinished();
+                        return;
+                    }
+                    const currentIdx = i;
+                    guardChunkIndexRef.current = currentIdx; // si cancel pendant cet utterance, on repartira d'ici
+                    const raw = chunks[i];
+                    const part = raw.trim();
+                    i += 1;
+                    if (!part) { next(); return; }
+
+                    const lastChar = raw.slice(-1);
+                    let pause = 50;
+                    if (lastChar === ',' || lastChar === ';') pause = commaMs;
+                    else if (lastChar === '.' || lastChar === '!' || lastChar === '?') pause = sentenceMs;
+
+                    const u = new SpeechSynthesisUtterance(part);
+                    u.lang = lang;
+                    u.rate = speechRate;
+                    u.pitch = pitch;
+                    if (voiceName) {
+                        const v = voices.find(vv => vv.name === voiceName);
+                        if (v) u.voice = v;
+                    }
+                    utteranceRef.current = u;
+                    u.onend = () => {
+                        guardChunkIndexRef.current = i; // pointe vers le prochain chunk; si cancel pendant le timeout, on repartira d'ici
+                        guardTimeoutRef.current = setTimeout(next, pause);
+                    };
+                    window.speechSynthesis.speak(u);
+                };
+                next();
+            };
+
             const speakGuardLine = (text) => {
                 if (guardSpeechState === 'playing') {
-                    window.speechSynthesis.pause();
+                    // Pause : cancel + mémoriser la position
+                    window.speechSynthesis.cancel();
+                    if (guardTimeoutRef.current) {
+                        clearTimeout(guardTimeoutRef.current);
+                        guardTimeoutRef.current = null;
+                    }
                     setGuardSpeechState('paused');
                     return;
                 }
                 if (guardSpeechState === 'paused') {
-                    window.speechSynthesis.resume();
+                    // Reprise depuis le chunk mémorisé
                     setGuardSpeechState('playing');
+                    speakGuardFromChunk(
+                        guardChunksRef.current,
+                        guardChunkIndexRef.current,
+                        guardSpeechOptsRef.current,
+                        () => setGuardSpeechState('idle')
+                    );
                     return;
                 }
+                // Démarrage
                 const voiceName = selectedVoices[currentLineData.character];
+                const opts = { voiceName, pitch: 0.50 };
+                const chunks = text.match(/[^,;.!?]+[.,;!?;]?/g) || [text];
+                guardChunksRef.current = chunks;
+                guardChunkIndexRef.current = 0;
+                guardSpeechOptsRef.current = opts;
                 setGuardSpeechState('playing');
-                speakWithPunctuationPauses(text, { voiceName, pitch: 0.50 }, () => {
-                    setGuardSpeechState('idle');
-                });
+                speakGuardFromChunk(chunks, 0, opts, () => setGuardSpeechState('idle'));
             };
 
             const speak = (text, character) => {
@@ -786,6 +847,7 @@
             const handleNext = () => {
                 setRevealedLine(false);
                 setGuardSpeechState('idle');
+                if (guardTimeoutRef.current) { clearTimeout(guardTimeoutRef.current); guardTimeoutRef.current = null; }
                 if (currentLine < scenes[currentScene].lines.length - 1) {
                     setCurrentLine(prev => prev + 1);
                     setIsPlaying(true);
@@ -797,6 +859,7 @@
             const handlePrevious = () => {
                 setRevealedLine(false);
                 setGuardSpeechState('idle');
+                if (guardTimeoutRef.current) { clearTimeout(guardTimeoutRef.current); guardTimeoutRef.current = null; }
                 if (currentLine > 0) {
                     setCurrentLine(prev => prev - 1);
                     setIsPlaying(false);
@@ -809,6 +872,7 @@
                 setCurrentLine(0);
                 setRevealedLine(false);
                 setGuardSpeechState('idle');
+                if (guardTimeoutRef.current) { clearTimeout(guardTimeoutRef.current); guardTimeoutRef.current = null; }
                 window.speechSynthesis.cancel();
             };
 
@@ -846,6 +910,7 @@
                                         setIsPlaying(false);
                                         setRevealedLine(false);
                                         setGuardSpeechState('idle');
+                                        if (guardTimeoutRef.current) { clearTimeout(guardTimeoutRef.current); guardTimeoutRef.current = null; }
                                         window.speechSynthesis.cancel();
                                     },
                                     className: `px-4 py-3 rounded-lg whitespace-nowrap transition-all mobile-tap-area ${
