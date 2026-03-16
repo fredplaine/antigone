@@ -271,6 +271,7 @@
             const [hintTimer, setHintTimer] = useState(null);
             const [bookmarks, setBookmarks] = useState({});
             const [touchStartX, setTouchStartX] = useState(null);
+            const [guardSpeechState, setGuardSpeechState] = useState('idle'); // 'idle', 'playing', 'paused'
             const utteranceRef = useRef(null);
             const rootRef = useRef(null);
 
@@ -737,8 +738,21 @@
             };
 
             const speakGuardLine = (text) => {
+                if (guardSpeechState === 'playing') {
+                    window.speechSynthesis.pause();
+                    setGuardSpeechState('paused');
+                    return;
+                }
+                if (guardSpeechState === 'paused') {
+                    window.speechSynthesis.resume();
+                    setGuardSpeechState('playing');
+                    return;
+                }
                 const voiceName = selectedVoices[currentLineData.character];
-                speakWithPunctuationPauses(text, { voiceName, pitch: 0.50 }, () => {});
+                setGuardSpeechState('playing');
+                speakWithPunctuationPauses(text, { voiceName, pitch: 0.50 }, () => {
+                    setGuardSpeechState('idle');
+                });
             };
 
             const speak = (text, character) => {
@@ -771,6 +785,7 @@
 
             const handleNext = () => {
                 setRevealedLine(false);
+                setGuardSpeechState('idle');
                 if (currentLine < scenes[currentScene].lines.length - 1) {
                     setCurrentLine(prev => prev + 1);
                     setIsPlaying(true);
@@ -781,6 +796,7 @@
 
             const handlePrevious = () => {
                 setRevealedLine(false);
+                setGuardSpeechState('idle');
                 if (currentLine > 0) {
                     setCurrentLine(prev => prev - 1);
                     setIsPlaying(false);
@@ -792,6 +808,7 @@
                 setIsPlaying(false);
                 setCurrentLine(0);
                 setRevealedLine(false);
+                setGuardSpeechState('idle');
                 window.speechSynthesis.cancel();
             };
 
@@ -828,6 +845,7 @@
                                         setCurrentLine(0);
                                         setIsPlaying(false);
                                         setRevealedLine(false);
+                                        setGuardSpeechState('idle');
                                         window.speechSynthesis.cancel();
                                     },
                                     className: `px-4 py-3 rounded-lg whitespace-nowrap transition-all mobile-tap-area ${
@@ -888,11 +906,15 @@
                                                 title: showPrompter ? 
                                                     (prompterState === 'hidden' || prompterState === 'hint' ? 'Cliquer pour voir le texte complet' :
                                                      prompterState === 'full' ? 'Cliquer pour écouter' : 'Cliquer pour voir le texte') :
-                                                    'Cliquer pour entendre'
+                                                    (guardSpeechState === 'playing' ? 'Cliquer pour mettre en pause' :
+                                                     guardSpeechState === 'paused' ? 'Cliquer pour reprendre' :
+                                                     'Cliquer pour entendre')
                                             }, 
                                                 showPrompter ? getPrompterText(currentLineData.text) : currentLineData.text
                                             ),
                                             !showPrompter && React.createElement('p', { className: "text-green-300/70 text-sm mt-2 italic" }, 
+                                                guardSpeechState === 'playing' ? '⏸ Cliquez pour mettre en pause' :
+                                                guardSpeechState === 'paused' ? '▶ Cliquez pour reprendre' :
                                                 '🔊 Cliquez sur le texte pour l\'entendre'
                                             )
                                         ) :
