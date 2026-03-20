@@ -588,7 +588,7 @@
                         { character: "ANTIGONE", text: "Tu as des enfants ?" },
                         { character: "LE GARDE", text: "Oui, deux.", isGuard: true },
                         { character: "ANTIGONE", text: "Tu les aimes ?" },
-                        { character: "LE GARDE", text: "Cela ne vous regarde pas. (Il commence a faire les cent pas dans la piece:pendant un moment, on entend plus que le bruit de ses pas)", isGuard: true },
+                        { character: "LE GARDE", text: "Cela ne vous regarde pas. (Il commence a faire les cent pas dans la piece: pendant un moment, on entend plus que le bruit de ses pas)", isGuard: true },
                         { character: "ANTIGONE", text: "Il y a longtemps que vous êtes garde ?" },
                         { character: "LE GARDE", text: "Après la guerre. J'étais sergent. J'ai rengagé.", isGuard: true },
                         { character: "ANTIGONE", text: "Il faut être sergent pour être garde ?" },
@@ -703,7 +703,8 @@
                 const { voiceName, pitch = 1, lang = 'fr-FR', rate = speechRate, commaPause: optComma, sentencePause: optSentence } = opts;
                 window.speechSynthesis.cancel();
 
-                const parts = text.match(/[^,;.!?]+[.,;!?;]?/g) || [text];
+                const cleanText = text.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+                const parts = cleanText.match(/[^,;.!?]+[.,;!?;]?/g) || [cleanText];
                 let i = 0;
 
                 const commaMs = (optComma !== undefined ? optComma : commaPause) * 1000;
@@ -810,7 +811,8 @@
                 // Démarrage
                 const voiceName = selectedVoices[currentLineData.character];
                 const opts = { voiceName, pitch: 0.50 };
-                const chunks = text.match(/[^,;.!?]+[.,;!?;]?/g) || [text];
+                const cleanText = text.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+                const chunks = cleanText.match(/[^,;.!?]+[.,;!?;]?/g) || [cleanText];
                 guardChunksRef.current = chunks;
                 guardChunkIndexRef.current = 0;
                 guardSpeechOptsRef.current = opts;
