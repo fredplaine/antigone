@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Antigone TRAE - Répétition Mobile</title>
+    <title>Antigone - Répétition Mobile</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -458,17 +458,19 @@
 
             // Gestion des gestes tactiles
             const handleTouchStart = (e) => {
-                setTouchStartX(e.touches[0].clientX);
+                setTouchStartX({ x: e.touches[0].clientX, y: e.touches[0].clientY });
             };
 
             const handleTouchEnd = (e) => {
                 if (touchStartX === null) return;
                 
                 const touchEndX = e.changedTouches[0].clientX;
-                const diffX = touchStartX - touchEndX;
+                const touchEndY = e.changedTouches[0].clientY;
+                const diffX = touchStartX.x - touchEndX;
+                const diffY = touchStartX.y - touchEndY;
                 
-                // Seuil pour détecter un swipe
-                if (Math.abs(diffX) > 50) {
+                // Seuil pour détecter un swipe (horizontal dominant)
+                if (Math.abs(diffX) > 80 && Math.abs(diffX) > Math.abs(diffY) * 2) {
                     if (diffX > 0) {
                         // Swipe gauche -> suivant
                         handleNext();
@@ -888,7 +890,7 @@
                 React.createElement('div', { className: "max-w-4xl mx-auto main-container" },
                     // Header
                     React.createElement('div', { className: "text-center mb-8 pt-4" },
-                        React.createElement('h1', { className: "text-4xl font-bold mb-2" }, 'Antigone TRAE'),
+                        React.createElement('h1', { className: "text-4xl font-bold mb-2" }, 'Antigone'),
                         React.createElement('p', { className: "text-purple-300 text-lg" }, 'Répétition Mobile - Le Garde'),
                         
                         // Indicateur de gestes
