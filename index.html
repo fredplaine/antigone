@@ -278,6 +278,7 @@
             const guardChunkIndexRef = useRef(0);
             const guardTimeoutRef = useRef(null);
             const guardSpeechOptsRef = useRef(null);
+            const lastGuardTapTimeRef = useRef(0);
 
             // Charger les paramètres sauvegardés
             useEffect(() => {
@@ -820,6 +821,41 @@
                 speakGuardFromChunk(chunks, 0, opts, () => setGuardSpeechState('idle'));
             };
 
+            const handleGuardTextTap = (text) => {
+                const now = Date.now();
+                const isDoubleTap = now - lastGuardTapTimeRef.current < 300;
+                lastGuardTapTimeRef.current = now;
+
+                if (isDoubleTap) {
+                    // Double-tap: reset au début sans démarrer la lecture
+                    // Arrêter la lecture en cours
+                    window.speechSynthesis.cancel();
+                    if (guardTimeoutRef.current) {
+                        clearTimeout(guardTimeoutRef.current);
+                        guardTimeoutRef.current = null;
+                    }
+                    
+                    // Réinitialiser le texte et chunks
+                    const voiceName = selectedVoices[currentLineData.character];
+                    const opts = { voiceName, pitch: 0.50 };
+                    const cleanText = text.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+                    const chunks = cleanText.match(/[^,;.!?]+[.,;!?;]?/g) || [cleanText];
+                    
+                    // Mémoriser les chunks et réinitialiser l'index à 0 (paused)
+                    guardChunksRef.current = chunks;
+                    guardChunkIndexRef.current = 0;
+                    guardSpeechOptsRef.current = opts;
+                    
+                    // État paused à l'index 0 (texte visible, lecture pas lancée)
+                    setGuardSpeechState('paused');
+                    
+                    return;
+                }
+
+                // Single tap: appeler speakGuardLine normalement
+                speakGuardLine(text);
+            };
+
             const speak = (text, character) => {
                 if (character === "LE GARDE") return;
 
@@ -971,13 +1007,13 @@
                                                 className: `cursor-pointer transition-colors mobile-tap-area ${
                                                     prompterState === 'audio' ? 'text-green-300' : 'text-white hover:text-green-200'
                                                 }`,
-                                                onClick: showPrompter ? handlePrompterClick : () => speakGuardLine(currentLineData.text),
+                                                onClick: showPrompter ? handlePrompterClick : () => handleGuardTextTap(currentLineData.text),
                                                 title: showPrompter ? 
                                                     (prompterState === 'hidden' || prompterState === 'hint' ? 'Cliquer pour voir le texte complet' :
                                                      prompterState === 'full' ? 'Cliquer pour écouter' : 'Cliquer pour voir le texte') :
-                                                    (guardSpeechState === 'playing' ? 'Cliquer pour mettre en pause' :
-                                                     guardSpeechState === 'paused' ? 'Cliquer pour reprendre' :
-                                                     'Cliquer pour entendre')
+                                                    (guardSpeechState === 'playing' ? 'Cliquer pour mettre en pause (Double-tap = reset)' :
+                                                     guardSpeechState === 'paused' ? 'Cliquer pour reprendre (Double-tap = reset)' :
+                                                     'Cliquer pour entendre (Double-tap = reset sans lancer)')
                                             }, 
                                                 showPrompter ? getPrompterText(currentLineData.text) : currentLineData.text
                                             ),
