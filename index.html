@@ -271,6 +271,9 @@
             const [hintTimer, setHintTimer] = useState(null);
             const [bookmarks, setBookmarks] = useState({});
             const [touchStartX, setTouchStartX] = useState(null);
+            const [stagingMode, setStagingMode] = useState(false); // Mode Filage
+            const [stagingRate, setStagingRate] = useState(1.0); // Vitesse du filage (multiplicateur)
+            const [stagingAutoAdvance, setStagingAutoAdvance] = useState(true); // Auto-avancer après lecture
             const [guardSpeechState, setGuardSpeechState] = useState('idle'); // 'idle', 'playing', 'paused'
             const utteranceRef = useRef(null);
             const rootRef = useRef(null);
@@ -279,6 +282,7 @@
             const guardTimeoutRef = useRef(null);
             const guardSpeechOptsRef = useRef(null);
             const lastGuardTapTimeRef = useRef(0);
+            const stagingAutoAdvanceTimeoutRef = useRef(null);
 
             // Charger les paramètres sauvegardés
             useEffect(() => {
@@ -289,6 +293,14 @@
                     setCommaPause(settings.commaPause || 0.25);
                     setSentencePause(settings.sentencePause || 0.75);
                     setSelectedVoices(settings.selectedVoices || {});
+                }
+
+                // Charger les paramètres du filage
+                const savedStaging = localStorage.getItem('antigoneTRAE_staging');
+                if (savedStaging) {
+                    const stagingSettings = JSON.parse(savedStaging);
+                    setStagingRate(stagingSettings.rate || 1.0);
+                    setStagingAutoAdvance(stagingSettings.autoAdvance !== false);
                 }
 
                 // Charger les marque-pages sauvegardés
@@ -319,6 +331,15 @@
             // Sauvegarder les marque-pages
             const saveBookmarks = () => {
                 localStorage.setItem('antigoneTRAE_bookmarks', JSON.stringify(bookmarks));
+            };
+
+            // Sauvegarder les paramètres du filage
+            const saveStagingSettings = () => {
+                const settings = {
+                    rate: stagingRate,
+                    autoAdvance: stagingAutoAdvance
+                };
+                localStorage.setItem('antigoneTRAE_staging', JSON.stringify(settings));
             };
 
             // Sauvegarder les paramètres du souffleur
@@ -701,7 +722,7 @@
             // Speak text while inserting pauses based on punctuation.
             // Comma/semicolon -> 500ms, period/!/? -> 1500ms, otherwise short gap.
             const speakWithPunctuationPauses = (text, opts = {}, onFinished) => {
-                const { voiceName, pitch = 1, lang = 'fr-FR', rate = speechRate, commaPause: optComma, sentencePause: optSentence } = opts;
+                const { voiceName, pitch = 1, lang = 'fr-FR', rate = speechRate, volume = 1, commaPause: optComma, sentencePause: optSentence } = opts;
                 window.speechSynthesis.cancel();
 
                 const cleanText = text.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
@@ -732,6 +753,7 @@
                     u.lang = lang;
                     u.rate = rate;
                     u.pitch = pitch;
+                    u.volume = volume;
                     if (voiceName) {
                         const v = voices.find(vv => vv.name === voiceName);
                         if (v) u.voice = v;
@@ -871,18 +893,48 @@
                 });
             };
 
+            const speakStaging = (text, isGuardLine) => {
+                const character = scenes[currentScene].lines[currentLine].character;
+                const voiceName = selectedVoices[character];
+                const pitch = character === 'CRÉON' ? 0.75 : 1.1;
+                // Répliques du Garde : volume 0 (silence chronométré pour laisser le temps de jouer)
+                const volume = isGuardLine ? 0 : 1;
+
+                speakWithPunctuationPauses(text, { voiceName, pitch, rate: speechRate * stagingRate, volume }, () => {
+                    // Auto-avancer à la fin de chaque réplique en Mode Filage
+                    if (stagingAutoAdvance && currentLine < scenes[currentScene].lines.length - 1) {
+                        setTimeout(() => setCurrentLine(prev => prev + 1), 300);
+                    } else if (currentLine >= scenes[currentScene].lines.length - 1) {
+                        setStagingMode(false);
+                    }
+                });
+            };
+
+            // Mode Filage: lecture automatique de toutes les répliques
             useEffect(() => {
-                if (isPlaying) {
+                if (stagingMode) {
+                    window.speechSynthesis.cancel();
+                    const line = scenes[currentScene].lines[currentLine];
+                    // Répliques des autres : lecture normale. Répliques du Garde : silence chronométré.
+                    speakStaging(line.text, line.isGuard);
+                } else {
+                    window.speechSynthesis.cancel();
+                }
+            }, [currentLine, stagingMode, currentScene]);
+
+            // Mode normal: lecture des répliques non-Garde
+            useEffect(() => {
+                if (!stagingMode && isPlaying) {
                     const line = scenes[currentScene].lines[currentLine];
                     if (!line.isGuard) {
                         speak(line.text, line.character);
                     } else {
                         setIsPlaying(false);
                     }
-                } else {
+                } else if (!stagingMode) {
                     window.speechSynthesis.cancel();
                 }
-            }, [currentLine, isPlaying, currentScene]);
+            }, [currentLine, isPlaying, currentScene, stagingMode]);
 
             const handleNext = () => {
                 setRevealedLine(false);
@@ -961,11 +1013,35 @@
                                 }, `Scène ${idx + 1}`)
                             )
                         ),
-                        React.createElement('p', { className: "text-sm text-purple-300 mt-2" }, scenes[currentScene].title)
+                        React.createElement('div', { className: "flex items-center justify-between mt-2" },
+                            React.createElement('p', { className: "text-sm text-purple-300" }, scenes[currentScene].title),
+                            React.createElement('button', {
+                                onClick: () => {
+                                    setStagingMode(!stagingMode);
+                                    if (!stagingMode) {
+                                        // Activation: préparer la lecture
+                                        setIsPlaying(false);
+                                        setRevealedLine(false);
+                                        setGuardSpeechState('idle');
+                                        if (guardTimeoutRef.current) { clearTimeout(guardTimeoutRef.current); guardTimeoutRef.current = null; }
+                                        window.speechSynthesis.cancel();
+                                    } else {
+                                        // Désactivation: nettoyer l'état
+                                        window.speechSynthesis.cancel();
+                                    }
+                                },
+                                className: `px-3 py-1 text-sm rounded transition-all mobile-tap-area ${
+                                    stagingMode
+                                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                                        : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                }`,
+                                title: stagingMode ? "Désactiver le Mode Filage" : "Activer le Mode Filage"
+                            }, stagingMode ? '▶ Filage actif' : '⏯ Mode Filage')
+                        )
                     ),
 
                     // Main Display
-                    React.createElement('div', { className: "bg-slate-800/50 backdrop-blur rounded-2xl p-6 mb-6 min-h-[300px] border border-purple-500/20" },
+                    React.createElement('div', { className: `bg-slate-800/50 backdrop-blur rounded-2xl p-6 mb-6 min-h-[300px] border ${stagingMode ? 'border-emerald-500/50' : 'border-purple-500/20'} transition-all` },
                         React.createElement('div', { className: "flex items-start gap-4 mb-4" },
                             React.createElement('div', { 
                                 className: `px-3 py-1 rounded-full text-sm font-semibold ${
@@ -978,57 +1054,69 @@
                             }, currentLineData.character),
                             React.createElement('div', { className: "text-purple-300 text-sm" },
                                 `${currentLine + 1} / ${scenes[currentScene].lines.length}`
+                            ),
+                            stagingMode && React.createElement('div', { className: "ml-auto px-2 py-1 bg-emerald-600 text-emerald-100 rounded text-xs font-semibold" }, 
+                                '▶ Mode Filage actif'
                             )
                         ),
 
                         React.createElement('div', { className: "text-xl leading-relaxed mobile-text" },
-                            currentLineData.isGuard ? 
-                                React.createElement('div', {
-                                    className: `bg-green-900/30 border-l-4 border-green-500 p-4 rounded transition-all ${
-                                        !revealedLine && !showPrompter ? 'cursor-pointer hover:bg-green-900/40' : ''
-                                    }`
-                                },
-                                    React.createElement('div', { className: "flex justify-between items-center mb-2" },
-                                        React.createElement('p', { className: "text-green-100 font-semibold" }, '🎭 VOTRE RÉPLIQUE'),
-                                        showPrompter && React.createElement('div', { className: "flex items-center gap-2" },
-                                            prompterState === 'hidden' ? React.createElement(EyeOffIcon) : 
-                                            prompterState === 'hint' ? React.createElement(EyeIcon) :
-                                            prompterState === 'audio' ? React.createElement(Volume2Icon) : React.createElement(EyeIcon),
-                                            React.createElement('span', { className: "text-xs text-green-300" },
-                                                prompterState === 'hidden' ? `Indice dans ${prompterTimer}s` :
-                                                prompterState === 'hint' ? 'Indice : 2 premiers mots' :
-                                                prompterState === 'audio' ? 'Lecture en cours' : 'Texte complet'
-                                            )
-                                        )
-                                    ),
-                                    (revealedLine || showPrompter) ? 
-                                        React.createElement('div', null,
-                                            React.createElement('p', { 
-                                                className: `cursor-pointer transition-colors mobile-tap-area ${
-                                                    prompterState === 'audio' ? 'text-green-300' : 'text-white hover:text-green-200'
-                                                }`,
-                                                onClick: showPrompter ? handlePrompterClick : () => handleGuardTextTap(currentLineData.text),
-                                                title: showPrompter ? 
-                                                    (prompterState === 'hidden' || prompterState === 'hint' ? 'Cliquer pour voir le texte complet' :
-                                                     prompterState === 'full' ? 'Cliquer pour écouter' : 'Cliquer pour voir le texte') :
-                                                    (guardSpeechState === 'playing' ? 'Cliquer pour mettre en pause (Double-tap = reset)' :
-                                                     guardSpeechState === 'paused' ? 'Cliquer pour reprendre (Double-tap = reset)' :
-                                                     'Cliquer pour entendre (Double-tap = reset sans lancer)')
-                                            }, 
-                                                showPrompter ? getPrompterText(currentLineData.text) : currentLineData.text
-                                            ),
-                                            !showPrompter && React.createElement('p', { className: "text-green-300/70 text-sm mt-2 italic" }, 
-                                                guardSpeechState === 'playing' ? '⏸ Cliquez pour mettre en pause' :
-                                                guardSpeechState === 'paused' ? '▶ Cliquez pour reprendre' :
-                                                '🔊 Cliquez sur le texte pour l\'entendre'
-                                            )
-                                        ) :
-                                        React.createElement('p', { 
-                                            className: "text-green-300/50 italic text-center py-8 mobile-tap-area",
-                                            onClick: () => setRevealedLine(true)
-                                        }, 'Cliquez pour révéler votre texte')
+                            stagingMode ? 
+                                (currentLineData.isGuard ?
+                                    React.createElement('div', { className: "bg-emerald-900/20 border-l-4 border-emerald-500 p-4 rounded text-center" },
+                                        React.createElement('p', { className: "text-emerald-300 italic font-semibold" }, '🎭 À vous de jouer !'),
+                                        React.createElement('p', { className: "text-2xl text-emerald-400 mt-4 font-bold" }, '...')
+                                    ) :
+                                    React.createElement('p', { className: "text-gray-200" }, currentLineData.text)
                                 ) :
-                                React.createElement('p', { className: "text-gray-200" }, currentLineData.text)
+                                (currentLineData.isGuard ? 
+                                    React.createElement('div', {
+                                        className: `bg-green-900/30 border-l-4 border-green-500 p-4 rounded transition-all ${
+                                            !revealedLine && !showPrompter ? 'cursor-pointer hover:bg-green-900/40' : ''
+                                        }`
+                                    },
+                                        React.createElement('div', { className: "flex justify-between items-center mb-2" },
+                                            React.createElement('p', { className: "text-green-100 font-semibold" }, '🎭 VOTRE RÉPLIQUE'),
+                                            showPrompter && React.createElement('div', { className: "flex items-center gap-2" },
+                                                prompterState === 'hidden' ? React.createElement(EyeOffIcon) : 
+                                                prompterState === 'hint' ? React.createElement(EyeIcon) :
+                                                prompterState === 'audio' ? React.createElement(Volume2Icon) : React.createElement(EyeIcon),
+                                                React.createElement('span', { className: "text-xs text-green-300" },
+                                                    prompterState === 'hidden' ? `Indice dans ${prompterTimer}s` :
+                                                    prompterState === 'hint' ? 'Indice : 2 premiers mots' :
+                                                    prompterState === 'audio' ? 'Lecture en cours' : 'Texte complet'
+                                                )
+                                            )
+                                        ),
+                                        (revealedLine || showPrompter) ? 
+                                            React.createElement('div', null,
+                                                React.createElement('p', { 
+                                                    className: `cursor-pointer transition-colors mobile-tap-area ${
+                                                        prompterState === 'audio' ? 'text-green-300' : 'text-white hover:text-green-200'
+                                                    }`,
+                                                    onClick: showPrompter ? handlePrompterClick : () => handleGuardTextTap(currentLineData.text),
+                                                    title: showPrompter ? 
+                                                        (prompterState === 'hidden' || prompterState === 'hint' ? 'Cliquer pour voir le texte complet' :
+                                                         prompterState === 'full' ? 'Cliquer pour écouter' : 'Cliquer pour voir le texte') :
+                                                        (guardSpeechState === 'playing' ? 'Cliquer pour mettre en pause (Double-tap = reset)' :
+                                                         guardSpeechState === 'paused' ? 'Cliquer pour reprendre (Double-tap = reset)' :
+                                                         'Cliquer pour entendre (Double-tap = reset sans lancer)')
+                                                }, 
+                                                    showPrompter ? getPrompterText(currentLineData.text) : currentLineData.text
+                                                ),
+                                                !showPrompter && React.createElement('p', { className: "text-green-300/70 text-sm mt-2 italic" }, 
+                                                    guardSpeechState === 'playing' ? '⏸ Cliquez pour mettre en pause' :
+                                                    guardSpeechState === 'paused' ? '▶ Cliquez pour reprendre' :
+                                                    '🔊 Cliquez sur le texte pour l\'entendre'
+                                                )
+                                            ) :
+                                            React.createElement('p', { 
+                                                className: "text-green-300/50 italic text-center py-8 mobile-tap-area",
+                                                onClick: () => setRevealedLine(true)
+                                            }, 'Cliquez pour révéler votre texte')
+                                    ) :
+                                    React.createElement('p', { className: "text-gray-200" }, currentLineData.text)
+                                )
                         )
                     ),
 
@@ -1267,6 +1355,72 @@
                                     ),
                                     React.createElement('p', { className: "text-sm text-gray-300 mt-1" }, 
                                         '→ Indice : "Garde Jonas" + _______________'
+                                    )
+                                )
+                            )
+                        )
+                    ),
+
+                    // Staging Mode Settings Panel
+                    stagingMode && React.createElement('div', { className: "bg-slate-800/90 backdrop-blur rounded-2xl p-6 mb-6 border border-emerald-500/20" },
+                        React.createElement('h3', { className: "text-xl font-bold mb-4 flex items-center gap-2 text-emerald-300" },
+                            React.createElement('div', { className: "panel-title-icon" },
+                                React.createElement(PlayIcon)
+                            ),
+                            'Paramètres du Mode Filage'
+                        ),
+
+                        React.createElement('div', { className: "space-y-6" },
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "block mb-2 font-semibold" }, 
+                                    `Vitesse de lecture: ${stagingRate.toFixed(2)}x`
+                                ),
+                                React.createElement('input', {
+                                    type: "range",
+                                    min: "0.5",
+                                    max: "2.0",
+                                    step: "0.1",
+                                    value: stagingRate,
+                                    onChange: (e) => {
+                                        setStagingRate(parseFloat(e.target.value));
+                                        saveStagingSettings();
+                                    },
+                                    className: "w-full"
+                                }),
+                                React.createElement('div', { className: "flex justify-between text-xs text-gray-400 mt-1" },
+                                    React.createElement('span', null, '0.5x (Lent)'),
+                                    React.createElement('span', null, '1x (Normal)'),
+                                    React.createElement('span', null, '2x (Rapide)')
+                                )
+                            ),
+
+                            React.createElement('div', null,
+                                React.createElement('label', { className: "flex items-center gap-3 cursor-pointer" },
+                                    React.createElement('input', {
+                                        type: "checkbox",
+                                        checked: stagingAutoAdvance,
+                                        onChange: (e) => {
+                                            setStagingAutoAdvance(e.target.checked);
+                                            saveStagingSettings();
+                                        },
+                                        className: "w-4 h-4"
+                                    }),
+                                    React.createElement('span', { className: "text-sm font-medium" }, 'Auto-avancer après chaque réplique')
+                                )
+                            ),
+
+                            React.createElement('div', { className: "bg-emerald-900/30 p-4 rounded-lg" },
+                                React.createElement('h4', { className: "font-semibold mb-2 text-emerald-200" }, 'Comment ça marche ?'),
+                                React.createElement('ul', { className: "text-sm text-gray-300 space-y-1" },
+                                    React.createElement('li', null, '• Toutes les répliques sont masquées (même les vôtres)'),
+                                    React.createElement('li', null, '• Lecture automatique à la vitesse paramétrée'),
+                                    React.createElement('li', null, '• Auto-avancement entre les répliques'),
+                                    React.createElement('li', null, '• Parfait pour jouer debout sans distractions')
+                                ),
+                                React.createElement('div', { className: "mt-3 p-3 bg-emerald-800/30 rounded" },
+                                    React.createElement('p', { className: "text-sm font-medium text-emerald-200" }, 'Conseil :'),
+                                    React.createElement('p', { className: "text-sm text-gray-300 mt-1" }, 
+                                        'Réglez la vitesse et testez avec 1-2 scènes avant un vrai filage : vous pouvez ajuster sur le vol !'
                                     )
                                 )
                             )
